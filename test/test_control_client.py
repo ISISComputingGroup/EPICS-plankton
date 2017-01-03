@@ -1,6 +1,6 @@
-#  -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # *********************************************************************
-# plankton - a library for creating hardware device simulators
+# lewis - a library for creating hardware device simulators
 # Copyright (C) 2016 European Spallation Source ERIC
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,14 +18,16 @@
 # *********************************************************************
 
 import unittest
+
 from mock import Mock, patch, call
 
-from core.control_client import ObjectProxy, ControlClient, ProtocolException, RemoteException
+from lewis.core.control_client import ObjectProxy, ControlClient, \
+    ProtocolException, RemoteException
 
 
 class TestControlClient(unittest.TestCase):
     @patch('uuid.uuid4')
-    @patch('core.control_client.ControlClient._get_zmq_req_socket')
+    @patch('lewis.core.control_client.ControlClient._get_zmq_req_socket')
     def testjson_rpc(self, mock_socket, mock_uuid):
         mock_uuid.return_value = '2'
 
@@ -38,15 +40,15 @@ class TestControlClient(unittest.TestCase):
              call().send_json({'method': 'foo', 'params': (), 'jsonrpc': '2.0', 'id': '2'}),
              call().recv_json()])
 
-    @patch('core.control_client.ControlClient._get_zmq_req_socket')
+    @patch('lewis.core.control_client.ControlClient._get_zmq_req_socket')
     def test_get_remote_object_works(self, mock_socket):
         client = ControlClient(host='127.0.0.1', port='10001')
 
         with patch.object(client, 'json_rpc') as json_rpc_mock:
             json_rpc_mock.return_value = ({'id': 2,
                                            'result': {'class': 'Test',
-                                                      'methods': ['a:set', 'a:get', 'setTest']}}
-                                          , 2)
+                                                      'methods': ['a:set', 'a:get', 'setTest']}},
+                                          2)
 
             obj = client.get_object()
 
@@ -55,7 +57,7 @@ class TestControlClient(unittest.TestCase):
 
             json_rpc_mock.assert_has_calls([call(':api')])
 
-    @patch('core.control_client.ControlClient._get_zmq_req_socket')
+    @patch('lewis.core.control_client.ControlClient._get_zmq_req_socket')
     def test_get_remote_object_raises_exception(self, mock_socket):
         client = ControlClient(host='127.0.0.1', port='10001')
 
@@ -66,7 +68,7 @@ class TestControlClient(unittest.TestCase):
 
             json_rpc_mock.assert_has_calls([call(':api')])
 
-    @patch('core.control_client.ControlClient._get_zmq_req_socket')
+    @patch('lewis.core.control_client.ControlClient._get_zmq_req_socket')
     def test_get_remote_object_collection(self, mock_socket):
         client = ControlClient(host='127.0.0.1', port='10001')
 
@@ -101,15 +103,29 @@ class TestObjectProxy(unittest.TestCase):
         obj = type('TestType', (ObjectProxy,), {})(Mock(), ['a:get', 'a:set', 'setTest'])
 
         with patch.object(obj, '_make_request') as request_mock:
-            b = obj.a
+            obj.a
             obj.a = 4
             obj.setTest()
 
         request_mock.assert_has_calls([call('a:get'), call('a:set', 4), call('setTest')])
 
-    def test_make_request_with_result(self):
+    def test_response_without_id_raises_exception(self):
         mock_connection = Mock(ControlClient)
         mock_connection.json_rpc.return_value = ({'result': 'test'}, 2)
+        obj = type('TestType', (ObjectProxy,), {})(mock_connection, ['setTest'])
+
+        self.assertRaises(ProtocolException, obj.setTest)
+
+    def test_response_with_id_mismatch_raises_exception(self):
+        mock_connection = Mock(ControlClient)
+        mock_connection.json_rpc.return_value = ({'result': 'test', 'id': 3}, 2)
+        obj = type('TestType', (ObjectProxy,), {})(mock_connection, ['setTest'])
+
+        self.assertRaises(ProtocolException, obj.setTest)
+
+    def test_make_request_with_result(self):
+        mock_connection = Mock(ControlClient)
+        mock_connection.json_rpc.return_value = ({'result': 'test', 'id': 2}, 2)
         obj = type('TestType', (ObjectProxy,), {})(mock_connection, ['setTest'])
 
         result = obj.setTest()
@@ -119,9 +135,12 @@ class TestObjectProxy(unittest.TestCase):
 
     def test_make_request_with_known_exception(self):
         mock_connection = Mock(ControlClient)
-        mock_connection.json_rpc.return_value = ({'error': {
-            'data': {'type': 'AttributeError',
-                     'message': 'Some message'}}}, 2)
+        mock_connection.json_rpc.return_value = (
+            {'error': {
+                'data': {
+                    'type': 'AttributeError',
+                    'message': 'Some message'}},
+                'id': 2}, 2)
 
         obj = type('TestType', (ObjectProxy,), {})(mock_connection, ['setTest'])
 
@@ -130,9 +149,12 @@ class TestObjectProxy(unittest.TestCase):
 
     def test_make_request_with_unknown_exception(self):
         mock_connection = Mock(ControlClient)
-        mock_connection.json_rpc.return_value = ({'error': {
-            'data': {'type': 'NonExistingException',
-                     'message': 'Some message'}}}, 2)
+        mock_connection.json_rpc.return_value = (
+            {'error': {
+                'data': {
+                    'type': 'NonExistingException',
+                    'message': 'Some message'}},
+                'id': 2}, 2)
 
         obj = type('TestType', (ObjectProxy,), {})(mock_connection, ['setTest'])
 

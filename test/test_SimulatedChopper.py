@@ -1,6 +1,6 @@
-#  -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # *********************************************************************
-# plankton - a library for creating hardware device simulators
+# lewis - a library for creating hardware device simulators
 # Copyright (C) 2016 European Spallation Source ERIC
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,13 +18,15 @@
 # *********************************************************************
 
 import unittest
-from devices.chopper import SimulatedChopper
-from devices.chopper.states import DefaultIdleState
+
+from lewis.devices.chopper.states import DefaultIdleState
+from lewis.devices.chopper import SimulatedChopper
 
 
 class TestSimulatedChopper(unittest.TestCase):
     def test_invalid_state_override_fails(self):
-        self.assertRaises(RuntimeError, SimulatedChopper, override_states={'invalid': DefaultIdleState()})
+        self.assertRaises(
+            RuntimeError, SimulatedChopper, override_states={'invalid': DefaultIdleState()})
 
     def test_valid_state_override_does_not_fail(self):
         chopper = SimulatedChopper(override_states={'idle': DefaultIdleState()})

@@ -1,6 +1,6 @@
-#  -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # *********************************************************************
-# plankton - a library for creating hardware device simulators
+# lewis - a library for creating hardware device simulators
 # Copyright (C) 2016 European Spallation Source ERIC
 #
 # This program is free software: you can redistribute it and/or modify
@@ -19,13 +19,13 @@
 
 import unittest
 
-from . import assertRaisesNothing
 from mock import Mock, patch, call
+import zmq
+import socket
 
-
-from core.control_server import ExposedObject, ExposedObjectCollection, ControlServer
-from zmq import Again as zmq_again_exception
-from zmq import NOBLOCK as zmq_no_block_flag
+from lewis.core.control_server import ExposedObject, ExposedObjectCollection, ControlServer
+from lewis.core.exceptions import LewisException
+from . import assertRaisesNothing
 
 
 class TestObject(object):
@@ -155,33 +155,86 @@ class TestExposedObjectCollection(unittest.TestCase):
         exposed_objects = ExposedObjectCollection({})
         obj = TestObject()
 
-        assertRaisesNothing(self, exposed_objects.add_object, ExposedObject(obj, ('setTest', 'getTest')), 'testObject')
+        assertRaisesNothing(self, exposed_objects.add_object,
+                            ExposedObject(obj, ('setTest', 'getTest')), 'testObject')
         exposed_objects['testObject.getTest'](41, 11)
         obj.getTest.assert_called_once_with(41, 11)
 
     def test_nested_collections(self):
         obj = TestObject()
-        exposed_objects = ExposedObjectCollection({'container': ExposedObjectCollection({'test': obj})})
+        exposed_objects = ExposedObjectCollection(
+            {'container': ExposedObjectCollection({'test': obj})})
 
         exposed_objects['container.test.getTest'](454, 43)
         obj.getTest.assert_called_once_with(454, 43)
 
 
 class TestControlServer(unittest.TestCase):
-    @patch('core.control_server.ControlServer._get_zmq_rep_socket')
-    def test_connection(self, mock_socket_method):
-        ControlServer(host='127.0.0.1', port='10001')
+    @patch('zmq.Context')
+    def test_connection(self, mock_context):
+        cs = ControlServer(None, connection_string='127.0.0.1:10001')
+        cs.start_server()
 
-        mock_socket_method.assert_has_calls([call(), call().bind('tcp://127.0.0.1:10001')])
+        mock_context.assert_has_calls([call(), call().socket(zmq.REP),
+                                       call().socket().bind('tcp://127.0.0.1:10001')])
 
-    @patch('core.control_server.ControlServer._get_zmq_rep_socket')
-    def test_process_does_not_block(self, mock_socket_method):
+    @patch('zmq.Context')
+    def test_server_can_only_be_started_once(self, mock_context):
+        server = ControlServer(None, connection_string='127.0.0.1:10000')
+        server.start_server()
+        server.start_server()
+
+        mock_context.assert_has_calls([call(), call().socket(zmq.REP),
+                                       call().socket().bind('tcp://127.0.0.1:10000')])
+
+    def test_process_raises_if_not_started(self):
+        server = ControlServer(None, connection_string='127.0.0.1:10000')
+
+        self.assertRaises(Exception, server.process)
+
+    def test_process_does_not_block(self):
         mock_socket = Mock()
-        mock_socket.recv_unicode.side_effect = zmq_again_exception()
+        mock_socket.recv_unicode.side_effect = zmq.Again()
 
-        mock_socket_method.return_value = mock_socket
-
-        server = ControlServer()
+        server = ControlServer(None, connection_string='127.0.0.1:10000')
+        server._socket = mock_socket
         assertRaisesNothing(self, server.process)
 
-        mock_socket.recv_unicode.assert_has_calls([call(flags=zmq_no_block_flag)])
+        mock_socket.recv_unicode.assert_has_calls([call(flags=zmq.NOBLOCK)])
+
+    def test_exposed_object_is_exposed_directly(self):
+        mock_collection = Mock(spec=ExposedObject)
+
+        server = ControlServer(object_map=mock_collection, connection_string='127.0.0.1:10000')
+        self.assertEqual(server.exposed_object, mock_collection)
+
+    @patch('lewis.core.control_server.ExposedObjectCollection')
+    def test_exposed_object_collection_is_constructed(self, exposed_object_mock):
+        ControlServer(object_map='test', connection_string='127.0.0.1:10000')
+
+        exposed_object_mock.assert_called_once_with('test')
+
+    @patch('zmq.Context')
+    def test_is_running(self, mock_context):
+        server = ControlServer(None, connection_string='127.0.0.1:10000')
+        self.assertFalse(server.is_running)
+        server.start_server()
+        self.assertTrue(server.is_running)
+
+    @patch('lewis.core.control_server.socket.gethostbyname')
+    def test_invalid_hostname_raises_LewisException(self, gethostbyname_mock):
+        def raise_exception(self):
+            raise socket.gaierror
+
+        gethostbyname_mock.side_effect = raise_exception
+
+        self.assertRaises(
+            LewisException, ControlServer,
+            object_map=None, connection_string='some_invalid_host.local:10000')
+
+        gethostbyname_mock.assert_called_once_with('some_invalid_host.local')
+
+    def test_localhost_does_not_raise_socket_error(self):
+        assertRaisesNothing(
+            self, ControlServer,
+            object_map=None, connection_string='localhost:10000')

@@ -8,18 +8,22 @@ services:
 python:
   - "2.7"
   - "3.5"
+
 install:
   - pip install -r requirements-dev.txt
   - pip install coveralls
+  - pip install flake8
+
 script:
-  - nosetests -w test --with-coverage --cover-package=core,devices
+  - flake8 .
+  - nosetests -w test --with-coverage --cover-package=lewis.core,lewis.devices
 
 after_success:
   - coveralls
   - if [ "$TRAVIS_BRANCH" == "master" ] && [ "$TRAVIS_PULL_REQUEST" == false ]; then
     docker login -e="$DOCKER_EMAIL" -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD";
-    docker build -t dmscid/plankton:edge .;
-    docker push dmscid/plankton;
+    docker build -t dmscid/lewis:edge .;
+    docker push dmscid/lewis:edge;
     fi
 
 branches:

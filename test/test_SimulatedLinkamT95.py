@@ -1,6 +1,6 @@
-#  -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # *********************************************************************
-# plankton - a library for creating hardware device simulators
+# lewis - a library for creating hardware device simulators
 # Copyright (C) 2016 European Spallation Source ERIC
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,9 +18,11 @@
 # *********************************************************************
 
 import unittest
-from devices.linkam_t95 import SimulatedLinkamT95
-from devices.linkam_t95.states import DefaultStartedState
-from devices.linkam_t95.interfaces.stream_interface import LinkamT95StreamInterface
+
+from lewis.devices.linkam_t95 import SimulatedLinkamT95
+from lewis.devices.linkam_t95.states import DefaultStartedState
+
+from lewis.devices.linkam_t95.interfaces.stream_interface import LinkamT95StreamInterface
 from . import assertRaisesNothing
 
 
@@ -29,10 +31,12 @@ class TestSimulatedLinkamT95(unittest.TestCase):
         assertRaisesNothing(self, SimulatedLinkamT95)
 
     def test_state_override_construction(self):
-        assertRaisesNothing(self, SimulatedLinkamT95, override_states={'started': DefaultStartedState()})
+        assertRaisesNothing(
+            self, SimulatedLinkamT95, override_states={'started': DefaultStartedState()})
 
     def test_transition_override_construction(self):
-        assertRaisesNothing(self, SimulatedLinkamT95, override_transitions={('init', 'stopped'): lambda: True})
+        assertRaisesNothing(
+            self, SimulatedLinkamT95, override_transitions={('init', 'stopped'): lambda: True})
 
     def test_default_status(self):
         linkam_device = SimulatedLinkamT95()
@@ -156,7 +160,7 @@ class TestSimulatedLinkamT95(unittest.TestCase):
 
         # Ensure status byte reports stopped
         status_bytes = linkam.get_status()
-        self.assertEqual(ord(status_bytes[0]),  0x01)
+        self.assertEqual(ord(status_bytes[0]), 0x01)
 
     def test_hold_and_resume(self):
         linkam_device = SimulatedLinkamT95()
@@ -225,15 +229,18 @@ class TestSimulatedLinkamT95(unittest.TestCase):
         linkam.start()
         linkam_device.process()
 
-        # Since the pump feature is not fully implemented, we can only make sure all valid input is accepted
-        assertRaisesNothing(self, linkam.pump_command, 'm0')    # Manual
+        # Since the pump feature is not fully implemented,
+        # we can only make sure all valid input is accepted
+        assertRaisesNothing(self, linkam.pump_command, 'm0')  # Manual
         linkam_device.process()
 
         for int_value, char_value in enumerate("0123456789:;<=>?@ABCDEFGHIJKLMN"):
-            assertRaisesNothing(self, linkam.pump_command, char_value)   # Various speeds (characters mean speeds 0 - 30)
+            assertRaisesNothing(
+                self, linkam.pump_command, char_value)  # Characters mean speeds 0 - 30
             linkam_device.process()
             status_bytes = linkam.get_status()
-            self.assertEqual(status_bytes[2], chr(0x80 | int_value))    # Verify Pump Status Byte reflects speed
+            self.assertEqual(
+                status_bytes[2], chr(0x80 | int_value))  # Verify Pump Status Byte reflects speed
 
         assertRaisesNothing(self, linkam.pump_command, 'a0')    # Auto
         linkam_device.process()

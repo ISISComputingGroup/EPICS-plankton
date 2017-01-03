@@ -1,6 +1,6 @@
-#  -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # *********************************************************************
-# plankton - a library for creating hardware device simulators
+# lewis - a library for creating hardware device simulators
 # Copyright (C) 2016 European Spallation Source ERIC
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,9 +18,10 @@
 # *********************************************************************
 
 import unittest
+
 from mock import call, patch
 
-from core.processor import CanProcess, CanProcessComposite
+from lewis.core.processor import CanProcess, CanProcessComposite
 
 
 class TestCanProcess(unittest.TestCase):

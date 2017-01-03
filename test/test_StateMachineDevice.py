@@ -1,6 +1,6 @@
-#  -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # *********************************************************************
-# plankton - a library for creating hardware device simulators
+# lewis - a library for creating hardware device simulators
 # Copyright (C) 2016 European Spallation Source ERIC
 #
 # This program is free software: you can redistribute it and/or modify
@@ -19,10 +19,10 @@
 
 import unittest
 
-from . import assertRaisesNothing
-from mock import Mock, patch, call
+from mock import Mock, call
 
-from devices import StateMachineDevice
+from lewis.devices import StateMachineDevice
+from . import assertRaisesNothing
 
 
 class MockStateMachineDevice(StateMachineDevice):
@@ -51,9 +51,11 @@ class TestStateMachineDevice(unittest.TestCase):
         self.assertRaises(RuntimeError, MockStateMachineDevice, override_initial_state='invalid')
 
     def test_overriding_undefined_data_fails(self):
-        assertRaisesNothing(self, MockStateMachineDevice, override_initial_data={'existing_member': 2.0})
+        assertRaisesNothing(
+            self, MockStateMachineDevice, override_initial_data={'existing_member': 2.0})
 
         smd = MockStateMachineDevice(override_initial_data={'existing_member': 2.0})
         self.assertEqual(smd.existing_member, 2.0)
 
-        self.assertRaises(AttributeError, MockStateMachineDevice, override_initial_data={'nonexisting_member': 1.0})
+        self.assertRaises(AttributeError, MockStateMachineDevice,
+                          override_initial_data={'nonexisting_member': 1.0})

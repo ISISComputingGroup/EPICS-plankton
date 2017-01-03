@@ -1,6 +1,6 @@
-#  -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # *********************************************************************
-# plankton - a library for creating hardware device simulators
+# lewis - a library for creating hardware device simulators
 # Copyright (C) 2016 European Spallation Source ERIC
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,10 +18,11 @@
 # *********************************************************************
 
 import unittest
-from . import assertRaisesNothing
+
 from mock import Mock, patch, call, ANY
 
-from core.simulation import Simulation
+from lewis.core.simulation import Simulation
+from . import assertRaisesNothing
 
 
 def set_simulation_running(environment):
@@ -30,7 +31,7 @@ def set_simulation_running(environment):
 
 
 class TestSimulation(unittest.TestCase):
-    @patch('core.simulation.seconds_since')
+    @patch('lewis.core.simulation.seconds_since')
     def test_process_cycle_returns_elapsed_time(self, elapsed_seconds_mock):
         env = Simulation(device=Mock(), adapter=Mock())
 
@@ -43,7 +44,7 @@ class TestSimulation(unittest.TestCase):
             elapsed_seconds_mock.assert_called_once_with(ANY)
             self.assertEqual(delta, 0.5)
 
-    @patch('core.simulation.seconds_since')
+    @patch('lewis.core.simulation.seconds_since')
     def test_process_cycle_changes_runtime_status(self, elapsed_seconds_mock):
         env = Simulation(device=Mock(), adapter=Mock())
 
@@ -133,13 +134,62 @@ class TestSimulation(unittest.TestCase):
         self.assertEqual(env.runtime, 1.0)
 
     def test_process_calls_control_server(self):
+        env = Simulation(device=Mock(), adapter=Mock())
+
         control_mock = Mock()
-        env = Simulation(device=Mock(), adapter=Mock(), control_server=control_mock)
+        env._control_server = control_mock
 
         set_simulation_running(env)
         env._process_cycle(0.5)
 
         control_mock.assert_has_calls([call.process()])
+
+    def test_None_control_server_is_None(self):
+        env = Simulation(device=Mock(), adapter=Mock(), control_server=None)
+
+        self.assertIsNone(env.control_server)
+
+    def test_invalid_control_server_fails(self):
+        self.assertRaises(Exception, Simulation,
+                          device=Mock(), adapter=Mock(), control_server=5.0)
+        self.assertRaises(Exception, Simulation,
+                          device=Mock(), adapter=Mock(), control_server=3434)
+
+        # With an arbitrary object it should also fail
+        self.assertRaises(Exception, Simulation,
+                          device=Mock(), adapter=Mock(), control_server=Mock())
+
+        # The string must have two components separated by :
+        self.assertRaises(Exception, Simulation,
+                          device=Mock(), adapter=Mock(), control_server='a:b:c')
+
+    @patch('lewis.core.simulation.ExposedObject')
+    @patch('lewis.core.simulation.ControlServer')
+    def test_construct_control_server(self, mock_control_server_type, exposed_object_mock):
+        device = Mock()
+        adapter = Mock()
+
+        exposed_object_mock.return_value = 'test'
+        assertRaisesNothing(self, Simulation, device=device, adapter=adapter,
+                            control_server='localhost:10000')
+
+        mock_control_server_type.assert_called_once_with(
+            {'device': device, 'simulation': 'test'},
+            'localhost:10000')
+
+    def test_start_starts_control_server(self):
+        env = Simulation(device=Mock(), adapter=Mock())
+
+        control_server_mock = Mock()
+        env._control_server = control_server_mock
+
+        def process_cycle_side_effect(delta):
+            env.stop()
+
+        env._process_cycle = Mock(side_effect=process_cycle_side_effect)
+        env.start()
+
+        control_server_mock.assert_has_calls([call.start_server()])
 
     def test_speed_range(self):
         env = Simulation(device=Mock(), adapter=Mock())
@@ -177,22 +227,39 @@ class TestSimulation(unittest.TestCase):
 
             mock_cycle.assert_has_calls([call(0.0)])
 
-    def test_control_server_setter(self):
-        env = Simulation(device=Mock(), adapter=Mock())
+    @patch('lewis.core.simulation.ExposedObject')
+    @patch('lewis.core.simulation.ControlServer')
+    def test_control_server_setter(self, control_server_mock, exposed_object_mock):
+        # The return value (= instance of ControlServer) must be specified
+        control_server_mock.return_value = Mock()
+        exposed_object_mock.return_value = 'test'
+        device_mock = Mock()
 
-        control_mock = Mock()
-        assertRaisesNothing(self, setattr, env, 'control_server', control_mock)
-        self.assertEqual(env.control_server, control_mock)
+        env = Simulation(device=device_mock, adapter=Mock())
+
+        assertRaisesNothing(self, setattr, env, 'control_server', '127.0.0.1:10001')
+        control_server_mock.assert_called_once_with(
+            {'device': device_mock, 'simulation': 'test'}, '127.0.0.1:10001')
+
+        control_server_mock.reset_mock()
 
         assertRaisesNothing(self, setattr, env, 'control_server', None)
+        self.assertIsNone(env.control_server)
 
         set_simulation_running(env)
 
-        # Can set new control server even when simulation is running
-        assertRaisesNothing(self, setattr, env, 'control_server', Mock())
+        # Can set new control server even when simulation is running:
+        assertRaisesNothing(self, setattr, env, 'control_server', '127.0.0.1:10002')
+
+        # The server is started automatically when the simulation is running
+        control_server_mock.assert_called_once_with(
+            {'device': device_mock, 'simulation': 'test'}, '127.0.0.1:10002')
+
+        # The instance must have one call to start_server
+        control_server_mock.return_value.assert_has_calls([call.start_server()])
 
         # Can not replace control server when simulation is running
-        self.assertRaises(RuntimeError, setattr, env, 'control_server', Mock())
+        self.assertRaises(RuntimeError, setattr, env, 'control_server', '127.0.0.1:10003')
 
     def test_connect_disconnect_exceptions(self):
         env = Simulation(device=Mock(), adapter=Mock())
@@ -207,7 +274,7 @@ class TestSimulation(unittest.TestCase):
         self.assertTrue(env.device_connected)
         self.assertRaises(RuntimeError, env.connect_device)
 
-    @patch('core.simulation.sleep')
+    @patch('lewis.core.simulation.sleep')
     def test_disconnect_device(self, sleep_mock):
         adapter_mock = Mock()
         env = Simulation(device=Mock(), adapter=adapter_mock)
@@ -235,3 +302,12 @@ class TestSimulation(unittest.TestCase):
         env._process_cycle(0.5)
         adapter_mock.assert_has_calls([call.handle(env.cycle_delay)])
         sleep_mock.assert_not_called()
+
+    def test_device_documentation_returns_adapter_documentation(self):
+        adapter_mock = Mock()
+        adapter_mock.documentation = 'test'
+
+        env = Simulation(device=Mock(), adapter=adapter_mock)
+        doc = env.device_documentation
+
+        self.assertEqual(doc, 'test')

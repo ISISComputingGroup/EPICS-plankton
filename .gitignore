@@ -1,3 +1,8 @@
 *.pyc
 .idea
+<<<<<<< HEAD
 .project
+=======
+docs/_build
+.coverage
+>>>>>>> upstream/master
